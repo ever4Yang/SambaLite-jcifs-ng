@@ -285,10 +285,11 @@ dependencies {
     // Enhanced UI and Animation libraries
     // Note: interpolator removed - transitive dependency of Material Design
     // implementation 'androidx.interpolator:interpolator:1.0.0'  // UNUSED - comes transitively
-    
-    // Memory Management
-    debugImplementation 'com.squareup.leakcanary:leakcanary-android:2.14'
-    
+
+    // Note: LeakCanary removed - it registers a second "Leaks" launcher icon in the
+    // app drawer of every debug build. Re-add it here if leak detection is needed:
+    // debugImplementation 'com.squareup.leakcanary:leakcanary-android:2.14'
+
     // Advanced UI Components
     implementation 'androidx.recyclerview:recyclerview:1.4.0'
     // Note: cardview removed - MaterialCardView from Material Design is used instead

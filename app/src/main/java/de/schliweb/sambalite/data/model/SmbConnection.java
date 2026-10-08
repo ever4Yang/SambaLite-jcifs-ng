@@ -38,6 +38,8 @@ public class SmbConnection implements Serializable {
   private boolean signingRequired = false;
   // If true, use async transport for improved transfer performance
   private boolean asyncTransport = false;
+  // If true, use jcifs-ng for CIFS/NT1 (SMBv1) instead of SMBJ
+  private boolean legacySmbV1 = false;
 
   /** Default constructor for SmbConnection. */
   public SmbConnection() {}
@@ -73,6 +75,8 @@ public class SmbConnection implements Serializable {
         + signingRequired
         + ", asyncTransport="
         + asyncTransport
+        + ", legacySmbV1="
+        + legacySmbV1
         + '}';
   }
 }

@@ -30,6 +30,7 @@ import com.hierynomus.smbj.share.DiskShare;
 import com.hierynomus.smbj.transport.tcp.async.AsyncDirectTcpTransportFactory;
 import de.schliweb.sambalite.data.model.SmbConnection;
 import de.schliweb.sambalite.data.repository.ConnectionRepositoryImpl;
+import de.schliweb.sambalite.data.repository.SmbV1Operations;
 import de.schliweb.sambalite.search.db.SearchDatabase;
 import de.schliweb.sambalite.search.db.SearchResult;
 import de.schliweb.sambalite.search.db.SearchResultDao;
@@ -107,6 +108,62 @@ public class SearchWorker extends Worker {
     String path = searchPath != null ? searchPath : "";
     int hitCount = 0;
     List<SearchResult> batch = new ArrayList<>(BATCH_SIZE);
+
+    if (connection.isLegacySmbV1()) {
+      try {
+        SmbV1Operations v1 = new SmbV1Operations();
+        final String finalQuery = query;
+        final int finalSearchType = searchType;
+        v1.searchFilesStreaming(
+            connection,
+            path,
+            "",
+            0,
+            includeSubfolders,
+            item -> {
+              if (isStopped()) return;
+              boolean isDirectory = item.isDirectory();
+              if (!matchesSearchCriteria(item.getName(), finalQuery, finalSearchType, isDirectory))
+                return;
+              SearchResult result = new SearchResult();
+              result.searchId = searchId;
+              result.name = item.getName();
+              result.path = item.getPath();
+              result.type = isDirectory ? "DIRECTORY" : "FILE";
+              result.size = item.getSize();
+              result.lastModified =
+                  item.getLastModified() != null ? item.getLastModified().getTime() : 0;
+              result.connectionId = connectionId;
+              result.foundAt = System.currentTimeMillis();
+              batch.add(result);
+              if (batch.size() >= BATCH_SIZE) {
+                dao.insertAll(new ArrayList<>(batch));
+                batch.clear();
+                updateNotification("Suche: " + finalQuery, "Treffer gefunden…");
+              }
+            });
+      } catch (Exception e) {
+        if (!isStopped()) {
+          LogUtils.e(TAG, "V1 search failed: " + e.getMessage());
+          if (!batch.isEmpty()) {
+            try {
+              dao.insertAll(batch);
+            } catch (Exception ignored) {
+            }
+          }
+          return Result.failure(new Data.Builder().putString("error", e.getMessage()).build());
+        }
+      }
+      if (!batch.isEmpty()) {
+        try {
+          dao.insertAll(batch);
+        } catch (Exception ignored) {
+        }
+      }
+      hitCount = dao.getResultsSync(searchId).size();
+      LogUtils.i(TAG, "V1 search completed: " + hitCount + " results for query=" + query);
+      return Result.success(new Data.Builder().putInt("hit_count", hitCount).build());
+    }
 
     try {
       SMBClient client = createSmbClient(connection);

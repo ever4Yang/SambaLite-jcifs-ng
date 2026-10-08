@@ -48,7 +48,9 @@ import com.hierynomus.smbj.share.File;
 import com.hierynomus.smbj.transport.tcp.async.AsyncDirectTcpTransportFactory;
 import de.schliweb.sambalite.R;
 import de.schliweb.sambalite.data.model.SmbConnection;
+import de.schliweb.sambalite.data.model.SmbFileItem;
 import de.schliweb.sambalite.data.repository.ConnectionRepositoryImpl;
+import de.schliweb.sambalite.data.repository.SmbV1Operations;
 import de.schliweb.sambalite.transfer.db.PendingTransfer;
 import de.schliweb.sambalite.transfer.db.PendingTransferDao;
 import de.schliweb.sambalite.transfer.db.TransferDatabase;
@@ -380,6 +382,10 @@ public class TransferWorker extends Worker {
   private boolean processConnectionBatch(PendingTransferDao dao, SmbConnection connection) {
     List<PendingTransfer> transfers = dao.getPendingForConnection(connection.getId());
     if (transfers.isEmpty()) return true;
+
+    if (connection.isLegacySmbV1()) {
+      return processConnectionBatchV1(dao, connection, transfers);
+    }
 
     LogUtils.i(
         TAG, "Processing " + transfers.size() + " transfers for connection: " + connection.getId());
@@ -1521,5 +1527,184 @@ public class TransferWorker extends Worker {
     if (slashIndex == -1) slashIndex = path.indexOf('\\');
 
     return slashIndex == -1 ? path : path.substring(0, slashIndex);
+  }
+
+  // ---------------------------------------------------------------------------
+  // SMBv1 (jcifs-ng) transfer path
+  // ---------------------------------------------------------------------------
+
+  private boolean processConnectionBatchV1(
+      PendingTransferDao dao, SmbConnection connection, List<PendingTransfer> transfers) {
+    SmbV1Operations v1 = new SmbV1Operations();
+    ContentResolver resolver = getApplicationContext().getContentResolver();
+    boolean allSuccess = true;
+
+    for (PendingTransfer transfer : transfers) {
+      if (isStopped()) return false;
+      if (!hasEnoughDiskSpace()) {
+        LogUtils.e(TAG, "V1: insufficient disk space, aborting transfers");
+        return false;
+      }
+      dao.updateStatus(transfer.id, "ACTIVE", System.currentTimeMillis());
+      updateNotification(
+          getApplicationContext().getString(R.string.transfer_title), transfer.displayName);
+      boolean isUpload = "UPLOAD".equals(transfer.transferType);
+      transferActionLog.log(
+          isUpload
+              ? TransferActionLog.Action.UPLOAD_STARTED
+              : TransferActionLog.Action.DOWNLOAD_STARTED,
+          transfer.displayName);
+
+      try {
+        if (isUpload) {
+          String parentPath = getParentPath(transfer.remotePath);
+          if (!parentPath.isEmpty()) ensureRemoteDirV1(v1, connection, parentPath);
+          try (InputStream in = resolver.openInputStream(Uri.parse(transfer.localUri))) {
+            if (in == null) throw new IOException("Cannot open input for: " + transfer.displayName);
+            v1.uploadFromStream(connection, in, transfer.remotePath);
+          }
+          UploadSourceGrants.releaseIfUnused(getApplicationContext(), dao, transfer.localUri);
+        } else if ("DOWNLOAD_DIRECTORY".equals(transfer.transferType)) {
+          processDirectoryDownloadV1(v1, dao, transfer, connection);
+          transferActionLog.log(TransferActionLog.Action.DOWNLOAD_COMPLETED, transfer.displayName);
+          continue;
+        } else {
+          try (OutputStream out = resolver.openOutputStream(Uri.parse(transfer.localUri), "w")) {
+            if (out == null)
+              throw new IOException("Cannot open output for: " + transfer.displayName);
+            v1.downloadToStream(connection, transfer.remotePath, out);
+          }
+          UploadSourceGrants.releaseDownloadTargetIfUnused(
+              getApplicationContext(), dao, transfer.localUri);
+        }
+        dao.updateStatus(transfer.id, "COMPLETED", System.currentTimeMillis());
+        transferActionLog.log(
+            isUpload
+                ? TransferActionLog.Action.UPLOAD_COMPLETED
+                : TransferActionLog.Action.DOWNLOAD_COMPLETED,
+            transfer.displayName);
+        sendTransferCompletedBroadcast(transfer);
+      } catch (Exception e) {
+        LogUtils.e(TAG, "V1 transfer failed: " + transfer.displayName + ": " + e.getMessage());
+        if (!isTransferCancelled(dao, transfer.id)) {
+          dao.markFailed(transfer.id, e.getMessage(), System.currentTimeMillis());
+          transferActionLog.log(
+              isUpload
+                  ? TransferActionLog.Action.UPLOAD_FAILED
+                  : TransferActionLog.Action.DOWNLOAD_FAILED,
+              transfer.displayName,
+              e.getMessage());
+        }
+        allSuccess = false;
+      }
+    }
+    return allSuccess;
+  }
+
+  private void processDirectoryDownloadV1(
+      SmbV1Operations v1,
+      PendingTransferDao dao,
+      PendingTransfer transfer,
+      SmbConnection connection)
+      throws Exception {
+    Uri destFolderUri = Uri.parse(transfer.localUri);
+    DocumentFile destDir = DocumentFile.fromTreeUri(getApplicationContext(), destFolderUri);
+    if (destDir == null || !destDir.isDirectory()) {
+      throw new IOException("Invalid destination folder: " + transfer.localUri);
+    }
+    DocumentFile subDir = destDir.findFile(transfer.displayName);
+    if (subDir == null || !subDir.isDirectory()) {
+      subDir = destDir.createDirectory(transfer.displayName);
+    }
+    if (subDir == null) {
+      throw new IOException("Cannot create local directory: " + transfer.displayName);
+    }
+    List<PendingTransfer> childTransfers = new ArrayList<>();
+    collectDirectoryFilesV1(
+        v1,
+        connection,
+        transfer.remotePath,
+        subDir,
+        transfer.connectionId,
+        transfer.batchId,
+        childTransfers);
+    if (!childTransfers.isEmpty()) {
+      dao.insertAll(childTransfers);
+      LogUtils.i(
+          TAG,
+          "V1 directory resolved: "
+              + transfer.displayName
+              + " -> "
+              + childTransfers.size()
+              + " files enqueued");
+    }
+    dao.deleteByIds(java.util.Collections.singletonList(transfer.id));
+  }
+
+  private void collectDirectoryFilesV1(
+      SmbV1Operations v1,
+      SmbConnection connection,
+      String remotePath,
+      DocumentFile localDir,
+      String connectionId,
+      String batchId,
+      List<PendingTransfer> outTransfers)
+      throws Exception {
+    List<SmbFileItem> items = v1.listFiles(connection, remotePath);
+    for (SmbFileItem item : items) {
+      String name = item.getName();
+      String childPath = remotePath.isEmpty() ? name : remotePath + "/" + name;
+      if (item.isDirectory()) {
+        DocumentFile childDir = localDir.findFile(name);
+        if (childDir == null || !childDir.isDirectory()) {
+          childDir = localDir.createDirectory(name);
+        }
+        if (childDir != null) {
+          collectDirectoryFilesV1(
+              v1, connection, childPath, childDir, connectionId, batchId, outTransfers);
+        }
+      } else {
+        DocumentFile localFile = localDir.createFile("application/octet-stream", name);
+        if (localFile == null) {
+          LogUtils.w(TAG, "V1: cannot create local file: " + name);
+          continue;
+        }
+        PendingTransfer t = new PendingTransfer();
+        t.transferType = "DOWNLOAD";
+        t.localUri = localFile.getUri().toString();
+        t.remotePath = childPath;
+        t.connectionId = connectionId;
+        t.displayName = name;
+        t.mimeType = "application/octet-stream";
+        t.fileSize = item.getSize();
+        t.bytesTransferred = 0;
+        t.status = "PENDING";
+        t.createdAt = System.currentTimeMillis();
+        t.updatedAt = System.currentTimeMillis();
+        t.batchId = batchId;
+        t.sortOrder = outTransfers.size();
+        outTransfers.add(t);
+      }
+    }
+  }
+
+  private void ensureRemoteDirV1(SmbV1Operations v1, SmbConnection connection, String path) {
+    if (path == null || path.isEmpty()) return;
+    String[] parts = path.replace('\\', '/').split("/");
+    StringBuilder current = new StringBuilder();
+    for (String part : parts) {
+      if (part.isEmpty()) continue;
+      String parentPath = current.toString();
+      if (current.length() > 0) current.append("/");
+      current.append(part);
+      String dirPath = current.toString();
+      try {
+        if (!v1.folderExists(connection, dirPath)) {
+          v1.createDirectory(connection, parentPath, part);
+        }
+      } catch (Exception e) {
+        LogUtils.w(TAG, "V1: could not create remote dir " + dirPath + ": " + e.getMessage());
+      }
+    }
   }
 }

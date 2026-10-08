@@ -41,7 +41,9 @@ import com.hierynomus.smbj.share.DiskShare;
 import com.hierynomus.smbj.share.File;
 import com.hierynomus.smbj.transport.tcp.async.AsyncDirectTcpTransportFactory;
 import de.schliweb.sambalite.data.model.SmbConnection;
+import de.schliweb.sambalite.data.model.SmbFileItem;
 import de.schliweb.sambalite.data.repository.ConnectionRepositoryImpl;
+import de.schliweb.sambalite.data.repository.SmbV1Operations;
 import de.schliweb.sambalite.sync.db.FileSyncState;
 import de.schliweb.sambalite.sync.db.SyncStateStore;
 import de.schliweb.sambalite.util.EnhancedFileUtils;
@@ -335,6 +337,11 @@ public class FolderSyncWorker extends Worker {
         DocumentFile.fromTreeUri(getApplicationContext(), Uri.parse(config.getLocalFolderUri()));
     if (localFolder == null || !localFolder.exists()) {
       throw new Exception("Local folder not accessible: " + config.getLocalFolderUri());
+    }
+
+    if (connection.isLegacySmbV1()) {
+      syncFolderV1(config, connection, localFolder);
+      return;
     }
 
     try (SMBClient client = createSmbClient(connection);
@@ -1879,5 +1886,167 @@ public class FolderSyncWorker extends Worker {
       current = current.findFile(seg);
     }
     return current;
+  }
+
+  // ---------------------------------------------------------------------------
+  // SMBv1 (jcifs-ng) sync path
+  // ---------------------------------------------------------------------------
+
+  private void syncFolderV1(SyncConfig config, SmbConnection connection, DocumentFile localFolder)
+      throws Exception {
+    SmbV1Operations v1 = new SmbV1Operations();
+    String remotePath = config.getRemotePath() != null ? config.getRemotePath() : "";
+    if (!remotePath.isEmpty()) {
+      ensureRemoteDirectoryExistsV1(v1, connection, remotePath);
+    }
+    switch (config.getDirection()) {
+      case LOCAL_TO_REMOTE:
+        syncLocalToRemoteV1(v1, connection, localFolder, remotePath);
+        break;
+      case REMOTE_TO_LOCAL:
+        syncRemoteToLocalV1(v1, connection, localFolder, remotePath);
+        break;
+      case BIDIRECTIONAL:
+        syncLocalToRemoteV1(v1, connection, localFolder, remotePath);
+        if (!isStopped()) syncRemoteToLocalV1(v1, connection, localFolder, remotePath);
+        break;
+    }
+  }
+
+  private void ensureRemoteDirectoryExistsV1(
+      SmbV1Operations v1, SmbConnection connection, String remotePath) {
+    if (remotePath == null || remotePath.isEmpty()) return;
+    String[] parts = remotePath.replace('\\', '/').split("/");
+    StringBuilder current = new StringBuilder();
+    for (String part : parts) {
+      if (part.isEmpty()) continue;
+      String parentPath = current.toString();
+      if (current.length() > 0) current.append("/");
+      current.append(part);
+      String dirPath = current.toString();
+      try {
+        if (!v1.folderExists(connection, dirPath)) {
+          v1.createDirectory(connection, parentPath, part);
+        }
+      } catch (Exception e) {
+        LogUtils.w(TAG, "V1: could not create remote dir " + dirPath + ": " + e.getMessage());
+      }
+    }
+  }
+
+  private void syncLocalToRemoteV1(
+      SmbV1Operations v1, SmbConnection connection, DocumentFile localFolder, String remotePath) {
+    if (isStopped()) return;
+    DocumentFile[] files = localFolder.listFiles();
+    for (DocumentFile localFile : files) {
+      if (isStopped()) return;
+      String name = localFile.getName();
+      if (name == null) continue;
+      if (isTrashAtRoot(name, "")) continue;
+      String remoteFilePath = remotePath.isEmpty() ? name : remotePath + "/" + name;
+      if (localFile.isDirectory()) {
+        ensureRemoteDirectoryExistsV1(v1, connection, remoteFilePath);
+        syncLocalToRemoteV1(v1, connection, localFile, remoteFilePath);
+      } else {
+        try {
+          boolean remoteExists = v1.fileExists(connection, remoteFilePath);
+          if (remoteExists) {
+            long remoteModified = v1.getRemoteLastModified(connection, remoteFilePath);
+            long localModified = localFile.lastModified();
+            if (!syncComparator.isLocalNewer(localModified, remoteModified)) {
+              actionLog.log(SyncActionLog.Action.SKIPPED, name, "remote newer or same (V1)");
+              continue;
+            }
+          }
+          try (InputStream in =
+              getApplicationContext().getContentResolver().openInputStream(localFile.getUri())) {
+            if (in == null) throw new Exception("Cannot open input stream for: " + name);
+            v1.uploadFromStream(connection, in, remoteFilePath);
+          }
+          actionLog.log(SyncActionLog.Action.UPLOADED, name);
+        } catch (Exception e) {
+          LogUtils.e(TAG, "V1 upload error " + name + ": " + e.getMessage());
+          actionLog.log(SyncActionLog.Action.ERROR, name, e.getMessage());
+        }
+      }
+    }
+  }
+
+  private void syncRemoteToLocalV1(
+      SmbV1Operations v1, SmbConnection connection, DocumentFile localFolder, String remotePath) {
+    if (isStopped()) return;
+    List<SmbFileItem> remoteFiles;
+    try {
+      remoteFiles = v1.listFiles(connection, remotePath);
+    } catch (Exception e) {
+      LogUtils.e(TAG, "V1: cannot list remote dir " + remotePath + ": " + e.getMessage());
+      return;
+    }
+    DocumentFile[] localFilesArray = localFolder.listFiles();
+    Map<String, DocumentFile> localFilesMap = new HashMap<>();
+    Map<String, DocumentFile> localFilesMapLower = new HashMap<>();
+    for (DocumentFile f : localFilesArray) {
+      String n = f.getName();
+      if (n != null) {
+        String key = normalizeName(n);
+        localFilesMap.put(key, f);
+        localFilesMapLower.put(key.toLowerCase(Locale.ROOT), f);
+      }
+    }
+    for (SmbFileItem item : remoteFiles) {
+      if (isStopped()) return;
+      String name = item.getName();
+      if (isTrashAtRoot(name, "")) continue;
+      String remoteFilePath = remotePath.isEmpty() ? name : remotePath + "/" + name;
+      if (item.isDirectory()) {
+        DocumentFile localSubDir = lookupLocal(localFilesMap, localFilesMapLower, name);
+        if (localSubDir == null) {
+          localSubDir = createDirectorySafe(localFolder, name);
+          actionLog.log(SyncActionLog.Action.CREATED_DIR, name);
+        }
+        if (localSubDir != null) {
+          syncRemoteToLocalV1(v1, connection, localSubDir, remoteFilePath);
+        }
+      } else {
+        if (!hasEnoughDiskSpace()) {
+          LogUtils.e(TAG, "V1: insufficient disk space, stopping downloads");
+          break;
+        }
+        try {
+          DocumentFile localFile = lookupLocal(localFilesMap, localFilesMapLower, name);
+          if (localFile == null) {
+            String mimeType = getMimeType(name);
+            DocumentFile newFile = localFolder.createFile(mimeType, name);
+            if (newFile != null) {
+              try (OutputStream out =
+                  getApplicationContext().getContentResolver().openOutputStream(newFile.getUri())) {
+                if (out == null) throw new Exception("Cannot open output stream for: " + name);
+                v1.downloadToStream(connection, remoteFilePath, out);
+              }
+              actionLog.log(SyncActionLog.Action.DOWNLOADED, name);
+            }
+          } else {
+            long remoteModified =
+                item.getLastModified() != null ? item.getLastModified().getTime() : 0;
+            long localModified = localFile.lastModified();
+            if (syncComparator.isRemoteNewer(localModified, remoteModified)) {
+              try (OutputStream out =
+                  getApplicationContext()
+                      .getContentResolver()
+                      .openOutputStream(localFile.getUri())) {
+                if (out == null) throw new Exception("Cannot open output stream for: " + name);
+                v1.downloadToStream(connection, remoteFilePath, out);
+              }
+              actionLog.log(SyncActionLog.Action.DOWNLOADED, name);
+            } else {
+              actionLog.log(SyncActionLog.Action.SKIPPED, name, "local newer or same (V1)");
+            }
+          }
+        } catch (Exception e) {
+          LogUtils.e(TAG, "V1 download error " + name + ": " + e.getMessage());
+          actionLog.log(SyncActionLog.Action.ERROR, name, e.getMessage());
+        }
+      }
+    }
   }
 }

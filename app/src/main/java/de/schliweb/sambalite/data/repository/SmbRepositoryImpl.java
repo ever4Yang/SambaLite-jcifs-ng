@@ -81,6 +81,16 @@ public class SmbRepositoryImpl implements SmbRepository {
   private volatile boolean downloadCancelled = false;
   private volatile boolean uploadCancelled = false;
 
+  @NonNull private final SmbV1Operations smbV1Operations = new SmbV1Operations();
+
+  private static boolean isLegacy(SmbConnection c) {
+    try {
+      return c.isLegacySmbV1();
+    } catch (Throwable ignored) {
+      return false;
+    }
+  }
+
   /**
    * Retrieves an SMBClient instance configured based on the given SmbConnection settings.
    *
@@ -269,12 +279,14 @@ public class SmbRepositoryImpl implements SmbRepository {
   public void cancelDownload() {
     LogUtils.d("SmbRepositoryImpl", "Download cancellation requested");
     downloadCancelled = true;
+    smbV1Operations.cancelDownload();
   }
 
   @Override
   public void cancelUpload() {
     LogUtils.d("SmbRepositoryImpl", "Upload cancellation requested");
     uploadCancelled = true;
+    smbV1Operations.cancelUpload();
   }
 
   @Override
@@ -286,6 +298,11 @@ public class SmbRepositoryImpl implements SmbRepository {
       boolean includeSubfolders,
       @NonNull java.util.function.Consumer<SmbFileItem> onResult)
       throws Exception {
+    if (isLegacy(connection)) {
+      smbV1Operations.searchFilesStreaming(
+          connection, path, query, searchType, includeSubfolders, onResult);
+      return;
+    }
     LogUtils.i("SmbRepositoryImpl", "Starting streaming search: query=" + query + ", path=" + path);
 
     List<SmbFileItem> result = new ArrayList<>();
@@ -790,6 +807,7 @@ public class SmbRepositoryImpl implements SmbRepository {
   @Override
   public @NonNull List<SmbFileItem> listFiles(
       @NonNull SmbConnection connection, @NonNull String path) throws Exception {
+    if (isLegacy(connection)) return smbV1Operations.listFiles(connection, path);
     String folderPath = path == null || path.isEmpty() ? "" : path;
     LogUtils.d(
         "SmbRepositoryImpl",
@@ -818,6 +836,7 @@ public class SmbRepositoryImpl implements SmbRepository {
 
   @Override
   public boolean testConnection(@NonNull SmbConnection connection) throws Exception {
+    if (isLegacy(connection)) return smbV1Operations.testConnection(connection);
     LogUtils.d(
         "SmbRepositoryImpl",
         "Testing connection to server: "
@@ -835,6 +854,10 @@ public class SmbRepositoryImpl implements SmbRepository {
 
   @Override
   public void deleteFile(@NonNull SmbConnection connection, @NonNull String path) throws Exception {
+    if (isLegacy(connection)) {
+      smbV1Operations.deleteFile(connection, path);
+      return;
+    }
     LogUtils.d("SmbRepositoryImpl", "Deleting file/directory: " + path);
     withShare(
         connection,
@@ -873,6 +896,7 @@ public class SmbRepositoryImpl implements SmbRepository {
   @NonNull
   public List<String> deleteFiles(@NonNull SmbConnection connection, @NonNull List<String> paths)
       throws Exception {
+    if (isLegacy(connection)) return smbV1Operations.deleteFiles(connection, paths);
     LogUtils.d("SmbRepositoryImpl", "Batch deleting " + paths.size() + " files");
     return withShare(
         connection,
@@ -929,6 +953,10 @@ public class SmbRepositoryImpl implements SmbRepository {
   public void renameFile(
       @NonNull SmbConnection connection, @NonNull String oldPath, @NonNull String newName)
       throws Exception {
+    if (isLegacy(connection)) {
+      smbV1Operations.renameFile(connection, oldPath, newName);
+      return;
+    }
     LogUtils.d("SmbRepositoryImpl", "Renaming file/directory: " + oldPath + " to " + newName);
     withShare(
         connection,
@@ -994,6 +1022,10 @@ public class SmbRepositoryImpl implements SmbRepository {
   public void createDirectory(
       @NonNull SmbConnection connection, @NonNull String path, @NonNull String name)
       throws Exception {
+    if (isLegacy(connection)) {
+      smbV1Operations.createDirectory(connection, path, name);
+      return;
+    }
     LogUtils.d("SmbRepositoryImpl", "Creating directory: " + name + " in path: " + path);
     withShare(
         connection,
@@ -1009,6 +1041,7 @@ public class SmbRepositoryImpl implements SmbRepository {
   @Override
   public boolean fileExists(@NonNull SmbConnection connection, @NonNull String path)
       throws Exception {
+    if (isLegacy(connection)) return smbV1Operations.fileExists(connection, path);
     LogUtils.d("SmbRepositoryImpl", "Checking if file exists: " + path);
     return withShare(
         connection,
@@ -1025,6 +1058,7 @@ public class SmbRepositoryImpl implements SmbRepository {
   @Override
   public boolean folderExists(@NonNull SmbConnection connection, @NonNull String path)
       throws Exception {
+    if (isLegacy(connection)) return smbV1Operations.folderExists(connection, path);
     LogUtils.d("SmbRepositoryImpl", "Checking if folder exists: " + path);
     return withShare(
         connection,
@@ -1040,6 +1074,7 @@ public class SmbRepositoryImpl implements SmbRepository {
 
   @Override
   public long getRemoteFileSize(@NonNull SmbConnection connection, @NonNull String path) {
+    if (isLegacy(connection)) return smbV1Operations.getRemoteFileSize(connection, path);
     try {
       return withShare(
           connection,
@@ -1069,6 +1104,7 @@ public class SmbRepositoryImpl implements SmbRepository {
   @Override
   public @Nullable SmbFileItem getFileItem(@NonNull SmbConnection connection, @NonNull String path)
       throws Exception {
+    if (isLegacy(connection)) return smbV1Operations.getFileItem(connection, path);
     return withShare(
         connection,
         share -> {
@@ -1105,6 +1141,8 @@ public class SmbRepositoryImpl implements SmbRepository {
   public byte[] readRange(
       @NonNull SmbConnection connection, @NonNull String remotePath, long offset, int length)
       throws Exception {
+    if (isLegacy(connection))
+      return smbV1Operations.readRange(connection, remotePath, offset, length);
     return withShare(
         connection,
         share -> {
@@ -1131,6 +1169,8 @@ public class SmbRepositoryImpl implements SmbRepository {
   public byte[] readFileBytes(
       @NonNull SmbConnection connection, @NonNull String remotePath, long maxBytes)
       throws Exception {
+    if (isLegacy(connection))
+      return smbV1Operations.readFileBytes(connection, remotePath, maxBytes);
     final int chunkSize = 256 * 1024; // 256KB chunks for fewer round-trips
     return withShare(
         connection,
@@ -1177,6 +1217,10 @@ public class SmbRepositoryImpl implements SmbRepository {
       @NonNull String remotePath,
       @NonNull java.io.File localFile)
       throws Exception {
+    if (isLegacy(connection)) {
+      smbV1Operations.downloadFile(connection, remotePath, localFile);
+      return;
+    }
     LogUtils.d(
         "SmbRepositoryImpl",
         "Downloading file: " + remotePath + " to " + localFile.getAbsolutePath());
@@ -1378,6 +1422,10 @@ public class SmbRepositoryImpl implements SmbRepository {
       @NonNull java.io.File localFile,
       @NonNull String remotePath)
       throws Exception {
+    if (isLegacy(connection)) {
+      smbV1Operations.uploadFile(connection, localFile, remotePath);
+      return;
+    }
     LogUtils.d(
         "SmbRepositoryImpl",
         "Uploading file: " + localFile.getAbsolutePath() + " to " + remotePath);
@@ -1397,6 +1445,10 @@ public class SmbRepositoryImpl implements SmbRepository {
       @NonNull String remotePath,
       @Nullable BackgroundSmbManager.ProgressCallback progressCallback)
       throws Exception {
+    if (isLegacy(connection)) {
+      smbV1Operations.uploadFileWithProgress(connection, localFile, remotePath, progressCallback);
+      return;
+    }
     LogUtils.d(
         "SmbRepositoryImpl",
         "Uploading file with progress: " + localFile.getAbsolutePath() + " to " + remotePath);
@@ -1617,6 +1669,10 @@ public class SmbRepositoryImpl implements SmbRepository {
       @NonNull String remotePath,
       @NonNull java.io.File localFolder)
       throws Exception {
+    if (isLegacy(connection)) {
+      smbV1Operations.downloadFolder(connection, remotePath, localFolder);
+      return;
+    }
     LogUtils.d(
         "SmbRepositoryImpl",
         "Downloading folder: " + remotePath + " to " + localFolder.getAbsolutePath());
@@ -1718,6 +1774,11 @@ public class SmbRepositoryImpl implements SmbRepository {
       @NonNull java.io.File localFolder,
       @Nullable BackgroundSmbManager.MultiFileProgressCallback progressCallback)
       throws Exception {
+    if (isLegacy(connection)) {
+      smbV1Operations.downloadFolderWithProgress(
+          connection, remotePath, localFolder, progressCallback);
+      return;
+    }
     // Neue Operation ⇒ Cancel-Flag zurücksetzen
     downloadCancelled = false;
 
@@ -1763,6 +1824,7 @@ public class SmbRepositoryImpl implements SmbRepository {
 
   @Override
   public @NonNull List<String> listShares(@NonNull SmbConnection connection) throws Exception {
+    if (isLegacy(connection)) return smbV1Operations.listShares(connection);
     LogUtils.d("SmbRepositoryImpl", "Listing shares on server: " + connection.getServer());
     try (Connection conn = getClientFor(connection).connect(connection.getServer())) {
       AuthenticationContext authContext = createAuthContext(connection);
@@ -2406,6 +2468,10 @@ public class SmbRepositoryImpl implements SmbRepository {
       @NonNull java.io.File localFile,
       @Nullable BackgroundSmbManager.ProgressCallback progressCallback)
       throws Exception {
+    if (isLegacy(connection)) {
+      smbV1Operations.downloadFileWithProgress(connection, remotePath, localFile, progressCallback);
+      return;
+    }
     LogUtils.d("SmbRepositoryImpl", "Starting file download with progress tracking: " + remotePath);
     downloadFileDirectly(connection, remotePath, localFile, progressCallback);
   }

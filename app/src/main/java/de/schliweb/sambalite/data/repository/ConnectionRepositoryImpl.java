@@ -175,6 +175,7 @@ public class ConnectionRepositoryImpl implements ConnectionRepository {
     jsonObject.put("encryptData", connection.isEncryptData());
     jsonObject.put("signingRequired", connection.isSigningRequired());
     jsonObject.put("asyncTransport", connection.isAsyncTransport());
+    jsonObject.put("legacySmbV1", connection.isLegacySmbV1());
     return jsonObject;
   }
 
@@ -193,6 +194,7 @@ public class ConnectionRepositoryImpl implements ConnectionRepository {
     connection.setEncryptData(jsonObject.optBoolean("encryptData", false));
     connection.setSigningRequired(jsonObject.optBoolean("signingRequired", false));
     connection.setAsyncTransport(jsonObject.optBoolean("asyncTransport", false));
+    connection.setLegacySmbV1(jsonObject.optBoolean("legacySmbV1", false));
     return connection;
   }
 }

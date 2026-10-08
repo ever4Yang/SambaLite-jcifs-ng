@@ -991,6 +991,8 @@ public class MainActivity extends AppCompatActivity
         dialogView.findViewById(R.id.signing_switch);
     com.google.android.material.materialswitch.MaterialSwitch asyncTransportSwitch =
         dialogView.findViewById(R.id.async_transport_switch);
+    com.google.android.material.materialswitch.MaterialSwitch legacySmbV1Switch =
+        dialogView.findViewById(R.id.legacy_smb_v1_switch);
 
     // Get references to shares UI elements
     View sharesSection = dialogView.findViewById(R.id.shares_section);
@@ -1157,6 +1159,7 @@ public class MainActivity extends AppCompatActivity
             if (signingSwitch != null) connection.setSigningRequired(signingSwitch.isChecked());
             if (asyncTransportSwitch != null)
               connection.setAsyncTransport(asyncTransportSwitch.isChecked());
+            if (legacySmbV1Switch != null) connection.setLegacySmbV1(legacySmbV1Switch.isChecked());
 
             LogUtils.i("MainActivity", "Saving new connection: " + name);
             saveConnectionAfterDefaultFolderCheck(
@@ -1203,6 +1206,8 @@ public class MainActivity extends AppCompatActivity
             if (signingSwitch != null) testConnection.setSigningRequired(signingSwitch.isChecked());
             if (asyncTransportSwitch != null)
               testConnection.setAsyncTransport(asyncTransportSwitch.isChecked());
+            if (legacySmbV1Switch != null)
+              testConnection.setLegacySmbV1(legacySmbV1Switch.isChecked());
 
             LogUtils.i("MainActivity", "Testing connection to server: " + server);
             testConnection(testConnection);
@@ -1326,6 +1331,8 @@ public class MainActivity extends AppCompatActivity
         dialogView.findViewById(R.id.signing_switch);
     com.google.android.material.materialswitch.MaterialSwitch asyncTransportSwitchEdit =
         dialogView.findViewById(R.id.async_transport_switch);
+    com.google.android.material.materialswitch.MaterialSwitch legacySmbV1SwitchEdit =
+        dialogView.findViewById(R.id.legacy_smb_v1_switch);
     com.google.android.material.textfield.TextInputLayout passwordLayoutEdit =
         dialogView.findViewById(R.id.password_layout);
 
@@ -1465,6 +1472,7 @@ public class MainActivity extends AppCompatActivity
     if (signingSwitchEdit != null) signingSwitchEdit.setChecked(connection.isSigningRequired());
     if (asyncTransportSwitchEdit != null)
       asyncTransportSwitchEdit.setChecked(connection.isAsyncTransport());
+    if (legacySmbV1SwitchEdit != null) legacySmbV1SwitchEdit.setChecked(connection.isLegacySmbV1());
 
     // Get references to custom buttons
     Button btnSave = dialogView.findViewById(R.id.btn_save);
@@ -1556,6 +1564,8 @@ public class MainActivity extends AppCompatActivity
               updatedConnection.setSigningRequired(signingSwitchEdit.isChecked());
             if (asyncTransportSwitchEdit != null)
               updatedConnection.setAsyncTransport(asyncTransportSwitchEdit.isChecked());
+            if (legacySmbV1SwitchEdit != null)
+              updatedConnection.setLegacySmbV1(legacySmbV1SwitchEdit.isChecked());
 
             LogUtils.i("MainActivity", "Updating connection: " + name);
             saveConnectionAfterDefaultFolderCheck(
@@ -1608,6 +1618,8 @@ public class MainActivity extends AppCompatActivity
               testConnection.setSigningRequired(signingSwitchEdit.isChecked());
             if (asyncTransportSwitchEdit != null)
               testConnection.setAsyncTransport(asyncTransportSwitchEdit.isChecked());
+            if (legacySmbV1SwitchEdit != null)
+              testConnection.setLegacySmbV1(legacySmbV1SwitchEdit.isChecked());
             testConnection(testConnection);
           } else {
             focusFirstInvalidField(firstInvalidField);

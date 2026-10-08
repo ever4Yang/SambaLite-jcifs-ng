@@ -1,76 +1,71 @@
 name: Build and Release
 
 on:
-  push:
-    tags:
-      - 'v*.*.*'  # v2.5.6 publishes a release, v2.5.6-rc1 a pre-release
+  workflow_dispatch:
+    inputs:
+      ref:
+        description: 'Branch or tag to build (e.g. main, v2.5.6, v2.5.6-rc1)'
+        required: true
+        default: 'main'
 
 jobs:
   build-and-release:
     runs-on: ubuntu-latest
-    
+    permissions:
+      contents: write
+
     steps:
     - name: Checkout code
       uses: actions/checkout@v4
-      
+      with:
+        ref: ${{ github.event.inputs.ref }}
+
     - name: Set up JDK 21
       uses: actions/setup-java@v4
       with:
         java-version: '21'
         distribution: 'temurin'
-        
+
     - name: Setup Gradle
       uses: gradle/actions/setup-gradle@v3
       with:
         gradle-version: wrapper
-        
+
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
-      
-    - name: Extract version from tag
+
+    - name: Detect ref type and extract version
       id: extract_version
       run: |
-        TAG="$GITHUB_REF_NAME"
-        if [[ ! "$TAG" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)(-rc([0-9]+))?$ ]]; then
-          echo "::error::Tag '$TAG' must look like v2.5.6 (release) or v2.5.6-rc1 (release candidate)"
-          exit 1
-        fi
-        MAJOR=${BASH_REMATCH[1]}
-        MINOR=${BASH_REMATCH[2]}
-        PATCH=${BASH_REMATCH[3]}
-        RC=${BASH_REMATCH[5]}
-
-        # VERSION is the full tag without "v" and becomes the versionName
-        # (2.5.6 or 2.5.6-rc1). BASE_VERSION is what build.gradle carries.
-        VERSION="${TAG#v}"
-        BASE_VERSION="$MAJOR.$MINOR.$PATCH"
-
-        # versionCode scheme MMmmpp, e.g. 2.5.6 -> 20506. A release candidate
-        # shares the versionCode of the release it precedes; Android installs
-        # an update with an equal versionCode, only a downgrade is refused.
-        VERSION_CODE=$((10#$MAJOR * 10000 + 10#$MINOR * 100 + 10#$PATCH))
-
-        if [ -n "$RC" ]; then
-          PRERELEASE=true
+        REF="${{ github.event.inputs.ref }}"
+        if [[ "$REF" =~ ^v([0-9]+)\.([0-9]+)\.([0-9]+)(-rc([0-9]+))?$ ]]; then
+          MAJOR=${BASH_REMATCH[1]}
+          MINOR=${BASH_REMATCH[2]}
+          PATCH=${BASH_REMATCH[3]}
+          RC=${BASH_REMATCH[5]}
+          VERSION="${REF#v}"
+          BASE_VERSION="$MAJOR.$MINOR.$PATCH"
+          VERSION_CODE=$((10#$MAJOR * 10000 + 10#$MINOR * 100 + 10#$PATCH))
+          PRERELEASE=$( [ -n "$RC" ] && echo true || echo false )
+          {
+            echo "IS_TAG=true"
+            echo "VERSION=$VERSION"
+            echo "BASE_VERSION=$BASE_VERSION"
+            echo "VERSION_CODE=$VERSION_CODE"
+            echo "PRERELEASE=$PRERELEASE"
+          } >> "$GITHUB_OUTPUT"
+          echo "Tag detected: $VERSION (versionCode $VERSION_CODE, pre-release: $PRERELEASE)"
         else
-          PRERELEASE=false
+          echo "IS_TAG=false" >> "$GITHUB_OUTPUT"
+          echo "Branch detected: $REF — build only, no GitHub Release will be created"
         fi
-
-        {
-          echo "VERSION=$VERSION"
-          echo "BASE_VERSION=$BASE_VERSION"
-          echo "VERSION_CODE=$VERSION_CODE"
-          echo "PRERELEASE=$PRERELEASE"
-        } >> "$GITHUB_OUTPUT"
-        echo "Building $VERSION (versionCode $VERSION_CODE, pre-release: $PRERELEASE)"
 
     - name: Check that the tag matches the version in the build files
+      if: steps.extract_version.outputs.IS_TAG == 'true'
       env:
         BASE_VERSION: ${{ steps.extract_version.outputs.BASE_VERSION }}
         VERSION_CODE: ${{ steps.extract_version.outputs.VERSION_CODE }}
       run: |
-        # F-Droid builds from these two values, so a GitHub release must not
-        # ship anything else. Fail instead of silently rewriting them.
         GRADLE_VERSION=$(sed -n "s/^[[:space:]]*version = '\([0-9.]*\)'.*/\1/p" build.gradle)
         GRADLE_CODE=$(sed -n 's/^[[:space:]]*versionCode \([0-9]*\).*/\1/p' app/build.gradle)
         if [ "$GRADLE_VERSION" != "$BASE_VERSION" ]; then
@@ -84,62 +79,63 @@ jobs:
         echo "build.gradle version $GRADLE_VERSION and versionCode $GRADLE_CODE match the tag"
 
     - name: Set the release candidate suffix as versionName
-      if: steps.extract_version.outputs.PRERELEASE == 'true'
+      if: steps.extract_version.outputs.IS_TAG == 'true' && steps.extract_version.outputs.PRERELEASE == 'true'
       env:
         VERSION: ${{ steps.extract_version.outputs.VERSION }}
       run: |
-        # app/build.gradle takes versionName from project.version, so only the
-        # root build.gradle changes; the repository itself keeps 2.5.6.
         sed -i "s/^\([[:space:]]*version = '\)[0-9.]*'/\1${VERSION}'/" build.gradle
         grep -n "version = '" build.gradle
 
-    - name: Decode Keystore
-      run: |
-        echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/keystore.jks
-        
     - name: Build Release APK and Bundle
       run: |
         ./gradlew assembleRelease bundleRelease \
         -PSIGNING_KEY_ALIAS="${SIGNING_KEY_ALIAS}" \
         -PSIGNING_KEY_PASSWORD="${SIGNING_KEY_PASSWORD}" \
         -PSIGNING_STORE_PASSWORD="${SIGNING_STORE_PASSWORD}"
-        # Rename outputs with version
-        mv app/build/outputs/apk/release/app-release.apk \
-        app/build/outputs/apk/release/SambaLite-v${{ steps.extract_version.outputs.VERSION }}-release.apk
-        mv app/build/outputs/bundle/release/app-release.aab \
-        app/build/outputs/bundle/release/SambaLite-v${{ steps.extract_version.outputs.VERSION }}-release.aab
-        # R8 mapping file, needed to de-obfuscate crash stack traces of this release
-        mv app/build/outputs/mapping/release/mapping.txt \
-        app/build/outputs/mapping/release/SambaLite-v${{ steps.extract_version.outputs.VERSION }}-mapping.txt
+        if [ "${{ steps.extract_version.outputs.IS_TAG }}" = "true" ]; then
+          VERSION="${{ steps.extract_version.outputs.VERSION }}"
+          mv app/build/outputs/apk/release/app-release.apk \
+             app/build/outputs/apk/release/SambaLite-v${VERSION}-release.apk
+          mv app/build/outputs/bundle/release/app-release.aab \
+             app/build/outputs/bundle/release/SambaLite-v${VERSION}-release.aab
+        fi
       env:
         SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
         SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
         SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
-    
+
     - name: List all APK files after build
       run: find app/build/outputs/ -type f -name "*.apk"
-      
-    - name: Verify APK signature
-      run: |
-        # Using aapt to verify the APK is signed
-        aapt dump badging app/build/outputs/apk/release/SambaLite-v${{ steps.extract_version.outputs.VERSION }}-release.apk | head -1
-        echo "APK verification completed"
-        
+
+    - name: Publish latest pre-release (branch build)
+      if: steps.extract_version.outputs.IS_TAG == 'false'
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: latest
+        name: Latest Build
+        body: "Automated release build from the latest commit on `${{ github.event.inputs.ref }}`."
+        prerelease: true
+        files: app/build/outputs/apk/release/app-release.apk
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
     - name: Generate checksums
+      if: steps.extract_version.outputs.IS_TAG == 'true'
       run: |
+        VERSION="${{ steps.extract_version.outputs.VERSION }}"
         cd app/build/outputs/apk/release/
-        sha256sum SambaLite-v${{ steps.extract_version.outputs.VERSION }}-release.apk > SambaLite-v${{ steps.extract_version.outputs.VERSION }}-release.apk.sha256
+        sha256sum SambaLite-v${VERSION}-release.apk > SambaLite-v${VERSION}-release.apk.sha256
         cd ../../bundle/release/
-        sha256sum SambaLite-v${{ steps.extract_version.outputs.VERSION }}-release.aab > SambaLite-v${{ steps.extract_version.outputs.VERSION }}-release.aab.sha256
-        
+        sha256sum SambaLite-v${VERSION}-release.aab > SambaLite-v${VERSION}-release.aab.sha256
+
     - name: Create Release Notes
+      if: steps.extract_version.outputs.IS_TAG == 'true'
       id: release_notes
       env:
         VERSION: ${{ steps.extract_version.outputs.VERSION }}
         BASE_VERSION: ${{ steps.extract_version.outputs.BASE_VERSION }}
         PRERELEASE: ${{ steps.extract_version.outputs.PRERELEASE }}
       run: |
-        # Prints the body of the "## [<name>]" section of CHANGELOG.md.
         changelog_section() {
           awk -v head="## [$1]" 'index($0, head) == 1 {flag=1; next} /^## \[/ {flag=0} flag' CHANGELOG.md
         }
@@ -154,15 +150,12 @@ jobs:
           echo "### Downloads"
           echo "- **APK**: For direct installation (sideloading)"
           echo "- **AAB**: For Google Play Store and other app stores"
-          echo "- **mapping.txt**: R8 mapping file to de-obfuscate stack traces of this release"
           echo ""
           echo "### Verification"
           echo "Both files include SHA256 checksums for integrity verification."
           echo ""
           echo "### Changelog"
           if [ -f CHANGELOG.md ]; then
-            # A release candidate normally has no section of its own yet;
-            # fall back to the final version's section, then to Unreleased.
             NOTES=$(changelog_section "$VERSION")
             [ -n "$NOTES" ] || NOTES=$(changelog_section "$BASE_VERSION")
             if [ -z "$NOTES" ] && [ "$PRERELEASE" = "true" ]; then
@@ -180,6 +173,7 @@ jobs:
         } >> "$GITHUB_OUTPUT"
 
     - name: Create GitHub Release
+      if: steps.extract_version.outputs.IS_TAG == 'true'
       uses: softprops/action-gh-release@v1
       with:
         tag_name: v${{ steps.extract_version.outputs.VERSION }}
@@ -192,12 +186,5 @@ jobs:
           app/build/outputs/apk/release/SambaLite-v${{ steps.extract_version.outputs.VERSION }}-release.apk.sha256
           app/build/outputs/bundle/release/SambaLite-v${{ steps.extract_version.outputs.VERSION }}-release.aab
           app/build/outputs/bundle/release/SambaLite-v${{ steps.extract_version.outputs.VERSION }}-release.aab.sha256
-          app/build/outputs/mapping/release/SambaLite-v${{ steps.extract_version.outputs.VERSION }}-mapping.txt
       env:
         GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        
-    - name: Clean up keystore
-      if: always()
-      run: |
-        rm -f app/keystore.jks
-        echo "Keystore cleaned up"

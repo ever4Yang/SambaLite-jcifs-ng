@@ -337,7 +337,21 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:text="@string/use_async_transport"
-            android:checked="false"
+            android:checked="false" />
+
+        <com.google.android.material.materialswitch.MaterialSwitch
+            android:id="@+id/legacy_smb_v1_switch"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/use_legacy_smb_v1"
+            android:checked="false" />
+
+        <com.google.android.material.textview.MaterialTextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:text="@string/use_legacy_smb_v1_summary"
+            android:textAppearance="?attr/textAppearanceBodySmall"
+            android:textColor="?attr/colorOnSurfaceVariant"
             android:layout_marginBottom="24dp" />
 
         <!-- Test Connection Button -->

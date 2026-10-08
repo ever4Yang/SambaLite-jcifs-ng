@@ -1,44 +1,35 @@
 # SambaLite
 
-*Dedicated to my wife Eva, who inspired this project with her need to organize her files.*
+
+
+## What's New — SMBv1 (CIFS/NT1) Legacy Support
+
+This fork adds optional **SMBv1 support** via [jcifs-ng](https://github.com/AgNO3/jcifs-ng) for connecting to old NAS devices, Windows XP/Server 2003, and embedded systems that do not support SMB2/3.
+
+- **Explicit per-connection toggle** — a "Use Legacy SMBv1 (CIFS)" switch in the Add/Edit Connection dialog. Existing connections are unaffected; the toggle defaults to off.
+- **Full feature parity** — browse, upload, download, delete, rename, create folder, search, folder sync, and transfer queue all work over SMBv1.
+- **Zero impact on SMB2/3 paths** — the SMBJ code is completely unchanged. The jcifs-ng backend is only invoked when the toggle is on.
+- **Powered by** `eu.agno3.jcifs:jcifs-ng:2.1.9` alongside the existing `com.hierynomus:smbj:0.14.0`.
+
+> **Note:** SMBv1 has known security weaknesses (no encryption, no modern signing). Use it only on trusted local networks and only when the server cannot be upgraded to SMB2/3.
+
+---
 
 SambaLite is a lightweight, modern, and open-source Android client for SMB/CIFS shares (Samba). It provides a minimalistic, reliable, and secure tool for accessing SMB shares on local networks without unnecessary features, ads, or bloat.
 
 **Note:** SambaLite is an independent open-source project and is not affiliated with the official [Samba Project](https://www.samba.org/) or SerNet.  
 The name refers solely to the supported SMB/CIFS network protocols.
 
-[<img src="https://fdroid.gitlab.io/artwork/badge/get-it-on.png"
-     alt="Get it on F-Droid"
-     height="80">](https://f-droid.org/packages/de.schliweb.sambalite/)
-[<img src="https://play.google.com/intl/en_us/badges/images/generic/en-play-badge.png"
-     alt="Get it on Google Play"
-     height="80">](https://play.google.com/store/apps/details?id=de.schliweb.sambalite)
 
-[![Downloads last month](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2Fkitswas%2Ffdroid-metrics-dashboard%2Fraw%2Frefs%2Fheads%2Fmain%2Fprocessed%2Fmonthly%2Fde.schliweb.sambalite.json&query=%24.total_downloads&logo=fdroid&label=Downloads%20last%20month)](https://f-droid.org/packages/de.schliweb.sambalite/)
-[![Downloads (all time)](https://img.shields.io/badge/dynamic/json?url=https%3A%2F%2Fgithub.com%2Fkitswas%2Ffdroid-metrics-dashboard%2Fraw%2Frefs%2Fheads%2Fmain%2Fprocessed%2Ftotal%2Fde.schliweb.sambalite.json&query=%24.total_downloads&logo=fdroid&label=Downloads%20(all%20time))](https://f-droid.org/packages/de.schliweb.sambalite/)
 
-Or download the latest APK from the [Releases Section](https://github.com/egdels/SambaLite/releases/latest).
 
-## APK Verification
-
-All official releases of SambaLite are signed with one of the following certificates:
-
-- **Upload key** (used for GitHub releases, F-Droid, and sideload APKs)  
-  SHA-256: AE:32:2D:3F:B7:1A:FE:21:DF:47:27:E3:7A:5C:68:03:51:1D:5A:2F:E1:FC:31:35:43:0C:EE:06:99:FA:1B:34
-
-- **Google Play App Signing key** (used for Play Store releases)  
-  SHA-256: 51:97:00:8E:6A:6E:9E:03:31:FD:0D:B2:0E:A7:3F:DB:4C:5A:C1:AC:95:E8:C0:8E:0D:7C:F2:66:1D:46:BE:78
-
-### Verify with apksigner
-```bash
-apksigner verify --print-certs SambaLite-vX.Y.Z.apk
-```
 
 ## Features
 
 | Feature                | Status | Description                                     |
 | ---------------------- | ------ | ----------------------------------------------- |
 | SMB/Share Connection   | ✅     | Connect with username/password and domain       |
+| Legacy SMBv1 (CIFS)    | ✅     | Optional per-connection toggle for old NAS/devices that don't support SMB2/3 |
 | File Browsing          | ✅     | Navigate through folders and files              |
 | Download/Upload        | ✅     | Transfer files between device and share         |
 | Open Files             | ✅     | Open files directly from the share              |
@@ -84,14 +75,60 @@ This effectively turns your smartphone into a **privacy-friendly mobile network 
 - **Dependencies:**
   - AndroidX and Material Design components
   - Dagger 2 for dependency injection
-  - SMBJ for SMB client functionality
+  - SMBJ for SMB2/3 client functionality
+  - jcifs-ng for optional SMBv1 (CIFS/NT1) legacy support
   - EncryptedSharedPreferences for secure credential storage
 
 ## Building the Project
 
+### Requirements
+
+- **JDK 21** (the project sets `sourceCompatibility = VERSION_21`)
+- Android SDK with `compileSdk 36`
+
+On Ubuntu/Debian, install JDK 21 if not already present:
+```bash
+sudo apt-get install -y openjdk-21-jdk-headless
+export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+```
+
+### Android Studio
+
 1. Clone the repository
 2. Open the project in Android Studio
-3. Build and run the app on your device or emulator
+3. Build and run on your device or emulator (`Run > Run 'app'`)
+
+### Command Line
+
+```bash
+# Clone
+git clone https://github.com/egdels/SambaLite.git
+cd SambaLite
+
+# Debug APK (installs directly on a device)
+export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
+./gradlew assembleDebug
+
+# Output: app/build/outputs/apk/debug/app-debug.apk
+
+# Install via ADB
+adb install app/build/outputs/apk/debug/app-debug.apk
+```
+
+### Release APK
+
+A signed release build requires the keystore credentials as environment variables or Gradle properties:
+
+```bash
+export SIGNING_STORE_PASSWORD=<password>
+export SIGNING_KEY_ALIAS=<alias>
+export SIGNING_KEY_PASSWORD=<password>
+
+./gradlew assembleRelease
+# Output: app/build/outputs/apk/release/app-release.apk
+```
+
+Unsigned release builds (e.g. for F-Droid) are produced automatically when the signing variables are absent.
 
 ## Security Notes
 
@@ -103,12 +140,7 @@ This effectively turns your smartphone into a **privacy-friendly mobile network 
 **Privacy notice:** SambaLite processes all data locally on your device.  
 No personal data is transmitted to the developer or any third parties.
 
-## ❤️ Support this project
-SambaLite is free and open source.
-If you find it useful, please consider supporting development:
 
-[![Ko-fi](https://img.shields.io/badge/Buy%20me%20a%20coffee-Ko--fi-orange)](https://ko-fi.com/egdels)
-[![PayPal](https://img.shields.io/badge/Donate-PayPal-blue)](https://www.paypal.com/paypalme/egdels)
 
 ## License
 
@@ -116,7 +148,7 @@ This project is licensed under the Apache License 2.0 - see the LICENSE file for
 
 ## Third-Party Libraries
 
-This project uses the SMBJ library (com.hierynomus:smbj), version 0.14.0, for SMB/CIFS client functionality.
+This project uses the SMBJ library (com.hierynomus:smbj), version 0.14.0, for SMB2/3 client functionality.
 
 SMBJ is licensed under the Apache License, Version 2.0.
 For more information, see: https://github.com/hierynomus/smbj
@@ -134,6 +166,11 @@ distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
+
+This project also uses the jcifs-ng library (eu.agno3.jcifs:jcifs-ng), version 2.1.9, for optional SMBv1 (CIFS/NT1) legacy support.
+
+jcifs-ng is licensed under the GNU Lesser General Public License, Version 2.1.
+For more information, see: https://github.com/AgNO3/jcifs-ng
 
 ## Disclaimer / Limitation of Liability
 

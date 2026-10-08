@@ -214,7 +214,12 @@ dependencies {
     }
 
     // jcifs-ng for SMBv1 (CIFS/NT1) legacy support
-    implementation('eu.agno3.jcifs:jcifs-ng:2.1.9') {
+    // 2.1.10 is the first release compatible with BouncyCastle >= 1.77: 2.1.9's SPNEGO code
+    // (jcifs.spnego.NegTokenInit) still references ASN1ApplicationSpecific / DERApplicationSpecific,
+    // which were removed in BC 1.77 and merged into ASN1TaggedObject. With the BouncyCastle
+    // version forced below, 2.1.9 fails at runtime with NoClassDefFoundError on the first
+    // SMBv1 session setup that negotiates SPNEGO.
+    implementation('eu.agno3.jcifs:jcifs-ng:2.1.10') {
         exclude group: 'org.slf4j', module: 'slf4j-log4j12'
         exclude group: 'javax.servlet', module: 'javax.servlet-api'
     }

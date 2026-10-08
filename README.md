@@ -9,7 +9,7 @@ This fork adds optional **SMBv1 support** via [jcifs-ng](https://github.com/AgNO
 - **Explicit per-connection toggle** — a "Use Legacy SMBv1 (CIFS)" switch in the Add/Edit Connection dialog. Existing connections are unaffected; the toggle defaults to off.
 - **Full feature parity** — browse, upload, download, delete, rename, create folder, search, folder sync, and transfer queue all work over SMBv1.
 - **Zero impact on SMB2/3 paths** — the SMBJ code is completely unchanged. The jcifs-ng backend is only invoked when the toggle is on.
-- **Powered by** `eu.agno3.jcifs:jcifs-ng:2.1.9` alongside the existing `com.hierynomus:smbj:0.14.0`.
+- **Powered by** `eu.agno3.jcifs:jcifs-ng:2.1.10` alongside the existing `com.hierynomus:smbj:0.14.0`.
 
 > **Note:** SMBv1 has known security weaknesses (no encryption, no modern signing). Use it only on trusted local networks and only when the server cannot be upgraded to SMB2/3.
 
@@ -167,7 +167,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 
-This project also uses the jcifs-ng library (eu.agno3.jcifs:jcifs-ng), version 2.1.9, for optional SMBv1 (CIFS/NT1) legacy support.
+This project also uses the jcifs-ng library (eu.agno3.jcifs:jcifs-ng), version 2.1.10, for optional SMBv1 (CIFS/NT1) legacy support.
 
 jcifs-ng is licensed under the GNU Lesser General Public License, Version 2.1.
 For more information, see: https://github.com/AgNO3/jcifs-ng

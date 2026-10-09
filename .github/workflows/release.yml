@@ -4,7 +4,8 @@ on:
   push:
     tags:
       - 'v*.*.*'  # v2.5.6 publishes a release, v2.5.6-rc1 a pre-release
-
+  workflow_dispatch:
+    
 jobs:
   build-and-release:
     runs-on: ubuntu-latest

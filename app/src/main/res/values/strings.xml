@@ -230,6 +230,11 @@
     <string name="use_async_transport">Use async transport (faster)</string>
     <string name="use_legacy_smb_v1">Use Legacy SMBv1 (CIFS)</string>
     <string name="use_legacy_smb_v1_summary">For old devices/NAS that do not support SMB2/3. Disables encryption and signing.</string>
+    <!-- Language switcher -->
+    <string name="action_language">Language</string>
+    <string name="language_english">English</string>
+    <string name="language_chinese">中文 (Chinese)</string>
+    <string name="language_system">Follow System</string>
     <!-- Multi-Select Delete -->
     <string name="delete_multiple_title">Delete files</string>
 

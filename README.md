@@ -24,23 +24,73 @@ The name refers solely to the supported SMB/CIFS network protocols.
 
 
 
+## Download
+
+Pre-built APKs are available on the [Releases page](https://github.com/ever4Yang/SambaLite-with-smbv1-legacy-support/releases).
+
+| Build | Description |
+|-------|-------------|
+| [Latest Build](https://github.com/ever4Yang/SambaLite-with-smbv1-legacy-support/releases/tag/latest) | Latest debug APK, updated automatically on every push to `main` |
+| [All Releases](https://github.com/ever4Yang/SambaLite-with-smbv1-legacy-support/releases) | Versioned release APKs (e.g. `v2.5.6`) with SHA256 checksums |
+
+**To install:**
+1. Download the `.apk` file
+2. On your Android device, enable **Settings → Install unknown apps** for your browser or file manager
+3. Open the downloaded APK and tap **Install**
+
 ## Features
 
-| Feature                | Status | Description                                     |
-| ---------------------- | ------ | ----------------------------------------------- |
-| SMB/Share Connection   | ✅     | Connect with username/password and domain       |
-| Legacy SMBv1 (CIFS)    | ✅     | Optional per-connection toggle for old NAS/devices that don't support SMB2/3 |
-| File Browsing          | ✅     | Navigate through folders and files              |
-| Download/Upload        | ✅     | Transfer files between device and share         |
-| Open Files             | ✅     | Open files directly from the share              |
-| Share Files/Text       | ✅     | Share files and text to SMB shares              |
-| Delete/Rename          | ✅     | Basic file operations with confirmation         |
-| Search with Wildcards  | ✅     | Find files using * and ? wildcards              |
-| Modern UI              | ✅     | Material Design with Dark Mode support          |
-| Multiple Connections   | ✅     | Manage multiple shares with custom names        |
-| Security/Privacy       | ✅     | Encrypted credential storage, no telemetry      |
-| Folder Sync            | ✅     | Automatic background sync between device and share ([User Guide](docs/sync_user_guide.md)) |
-| Transfer Queue         | ✅     | Background queuing for uploads and downloads ([User Guide](docs/transfer_queue_user_guide.md)) |
+### New in This Fork
+
+| Feature             | Description                                                                 |
+| ------------------- | --------------------------------------------------------------------------- |
+| Legacy SMBv1 (CIFS) | Optional per-connection toggle for old NAS/devices that don't support SMB2/3 |
+| Language Switch     | Switch between English and 中文 (Chinese) from the overflow menu            |
+
+### Original Features
+
+| Feature               | Description                                                                                      |
+| --------------------- | ------------------------------------------------------------------------------------------------ |
+| SMB/Share Connection  | Connect with username/password and domain                                                        |
+| File Browsing         | Navigate through folders and files                                                               |
+| Download/Upload       | Transfer files between device and share                                                          |
+| Open Files            | Open files directly from the share                                                               |
+| Share Files/Text      | Share files and text to SMB shares                                                               |
+| Delete/Rename         | Basic file operations with confirmation                                                          |
+| Search with Wildcards | Find files using * and ? wildcards                                                               |
+| Modern UI             | Material Design with Dark Mode support                                                           |
+| Multiple Connections  | Manage multiple shares with custom names                                                         |
+| Security/Privacy      | Encrypted credential storage, no telemetry                                                       |
+| Folder Sync           | Automatic background sync between device and share ([User Guide](docs/sync_user_guide.md))      |
+| Transfer Queue        | Background queuing for uploads and downloads ([User Guide](docs/transfer_queue_user_guide.md))  |
+
+## Screenshots
+
+### SMBv1 (CIFS) Connection Toggle
+
+![SMBv1 toggle in Add Connection dialog](Screenshot_smbv1.png)
+
+The "Use Legacy SMBv1 (CIFS)" switch appears at the bottom of the Add/Edit Connection dialog. It is off by default — existing SMB2/3 connections are not affected.
+
+### Language Switch
+
+<img src="screensshot-switch-lang.png" width="320" alt="Language picker dialog showing English, 中文, and Follow System options"/>
+
+The language picker dialog with **中文** selected. The welcome screen behind it is already rendered in Chinese ("欢迎使用 SambaLite+").
+
+## Language Switch
+
+The app supports **English** and **中文 (Chinese)**. To change the language:
+
+1. Tap the **⋮** overflow menu in the top-right corner of the main screen
+2. Tap **Language** (语言)
+3. Select **English**, **中文 (Chinese)**, or **Follow System**
+
+The app restarts immediately and all UI strings update to the selected language. The choice is persisted — it survives app restarts and device reboots.
+
+> **Follow System** uses whatever language Android is set to. If Android is set to Chinese, the app shows Chinese; any other system language falls back to English.
+
+<img src="screensshot-switch-lang.png" width="320" alt="Language picker showing English, 中文, and Follow System options"/>
 
 ## Technical Details
 
@@ -126,9 +176,6 @@ export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64
 ### Command Line
 
 ```bash
-# Clone
-git clone https://github.com/egdels/SambaLite.git
-cd SambaLite
 
 # Debug APK (installs directly on a device)
 export JAVA_HOME=/usr/lib/jvm/java-21-openjdk-amd64

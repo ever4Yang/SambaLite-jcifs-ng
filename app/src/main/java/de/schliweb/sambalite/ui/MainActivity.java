@@ -33,6 +33,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.app.AppCompatDelegate;
+import androidx.core.os.LocaleListCompat;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.content.ContextCompat;
 import androidx.lifecycle.ViewModelProvider;
@@ -1675,6 +1677,11 @@ public class MainActivity extends AppCompatActivity
       startActivity(intent);
       return true;
     }
+    if (item.getItemId() == R.id.action_language) {
+      LogUtils.d("MainActivity", "Language menu item selected");
+      showLanguageDialog();
+      return true;
+    }
     if (item.getItemId() == R.id.action_quit) {
       LogUtils.d("MainActivity", "Quit menu item selected");
       handleQuit();
@@ -1703,6 +1710,31 @@ public class MainActivity extends AppCompatActivity
       backgroundSmbManager.requestStopService();
     }
     finishAffinity();
+  }
+
+  private void showLanguageDialog() {
+    LocaleListCompat current = AppCompatDelegate.getApplicationLocales();
+    String currentTag = current.isEmpty() ? "" : current.get(0).getLanguage();
+    int checked = currentTag.startsWith("zh") ? 1 : currentTag.equals("en") ? 0 : 2;
+    String[] items = {
+      getString(R.string.language_english),
+      getString(R.string.language_chinese),
+      getString(R.string.language_system)
+    };
+    new MaterialAlertDialogBuilder(this)
+        .setTitle(R.string.action_language)
+        .setSingleChoiceItems(
+            items,
+            checked,
+            (dialog, which) -> {
+              LocaleListCompat locale;
+              if (which == 0) locale = LocaleListCompat.forLanguageTags("en");
+              else if (which == 1) locale = LocaleListCompat.forLanguageTags("zh");
+              else locale = LocaleListCompat.getEmptyLocaleList();
+              AppCompatDelegate.setApplicationLocales(locale);
+              dialog.dismiss();
+            })
+        .show();
   }
 
   /**

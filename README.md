@@ -1,10 +1,10 @@
-# SambaLite
+# SambaLite+
 
 
 
 ## What's New — SMBv1 (CIFS/NT1) Legacy Support
 
-This fork adds optional **SMBv1 support** via [jcifs-ng](https://github.com/AgNO3/jcifs-ng) for connecting to old NAS devices, Windows XP/Server 2003, and embedded systems that do not support SMB2/3.
+This fork of [egdels/SambaLite](https://github.com/egdels/SambaLite) adds optional **SMBv1 support** via [jcifs-ng](https://github.com/AgNO3/jcifs-ng) for connecting to old NAS devices, Windows XP/Server 2003, and embedded systems that do not support SMB2/3.
 
 - **Explicit per-connection toggle** — a "Use Legacy SMBv1 (CIFS)" switch in the Add/Edit Connection dialog. Existing connections are unaffected; the toggle defaults to off.
 - **Full feature parity** — browse, upload, download, delete, rename, create folder, search, folder sync, and transfer queue all work over SMBv1.
@@ -42,42 +42,67 @@ The name refers solely to the supported SMB/CIFS network protocols.
 | Folder Sync            | ✅     | Automatic background sync between device and share ([User Guide](docs/sync_user_guide.md)) |
 | Transfer Queue         | ✅     | Background queuing for uploads and downloads ([User Guide](docs/transfer_queue_user_guide.md)) |
 
-## Mobile Document Pipeline
-
-SambaLite can be combined with
-[MakeACopy](https://github.com/egdels/makeacopy) to create a fully
-automated document workflow:
-
-    Paper document
-        ↓
-    Scan with MakeACopy
-        ↓
-    Inbox folder
-        ↓
-    SambaLite folder sync
-        ↓
-    NAS / archive (e.g. paperless-ngx)
-
-This effectively turns your smartphone into a **privacy-friendly mobile network scanner**.
-
-## Project Goals
-
-- **Minimalism:** Only essential features, no unnecessary configurations
-- **User-Friendly:** Clean, intuitive interface with minimal UI
-- **Modern:** Using current Android libraries and best practices
-- **Privacy-Focused:** No telemetry, tracking, or unnecessary permissions
-- **Maintainable:** Clean, documented code that's easy to extend
-
 ## Technical Details
 
 - **Language:** Java 11+
 - **Architecture:** MVVM with Repository pattern
-- **Dependencies:**
-  - AndroidX and Material Design components
-  - Dagger 2 for dependency injection
-  - SMBJ for SMB2/3 client functionality
-  - jcifs-ng for optional SMBv1 (CIFS/NT1) legacy support
-  - EncryptedSharedPreferences for secure credential storage
+- **Min SDK:** 26 (Android 8.0) · **Compile SDK:** 36
+
+### Dual-Backend Architecture
+
+| Backend | Library | Protocol | When used |
+|---------|---------|----------|-----------|
+| SMBJ | `com.hierynomus:smbj:0.14.0` | SMB2 / SMB3 | Default (toggle off) |
+| jcifs-ng | `eu.agno3.jcifs:jcifs-ng:2.1.10` | SMBv1 (CIFS/NT1) | Toggle on |
+
+The two backends are completely independent. Enabling SMBv1 on one connection never affects another.
+
+### Per-Connection Flag
+
+`SmbConnection.legacySmbV1` (boolean, default `false`) controls which backend is used. It is persisted as `"legacySmbV1"` in JSON — a missing key defaults to `false`, so existing saved connections are automatically backward-compatible.
+
+### Routing
+
+`SmbRepositoryImpl` checks `isLegacy(connection)` at the top of every public method and delegates to `SmbV1Operations` when true. The SMBJ code path is never touched for a legacy connection. The same guard is present in `SearchWorker`, `FolderSyncWorker`, and `TransferWorker`.
+
+### SmbV1Operations (jcifs-ng wrapper)
+
+A fresh `CIFSContext` is built per call with these fixed properties:
+
+```
+jcifs.smb.client.minVersion       = SMB1
+jcifs.smb.client.maxVersion       = SMB1
+jcifs.smb.client.signingPreferred = false
+jcifs.smb.client.connTimeout      = 30000  (ms)
+jcifs.smb.client.responseTimeout  = 60000  (ms)
+```
+
+Authentication: NTLM via `NtlmPasswordAuthenticator`; anonymous credentials when username/password are both empty.
+
+Cancellation: `volatile boolean cancelled` checked inside download/upload byte loops.
+
+**Supported operations:**
+
+| Category | Methods |
+|----------|---------|
+| Discovery | `listShares`, `listFiles`, `getFileItem`, `fileExists`, `folderExists`, `getRemoteFileSize`, `getRemoteLastModified` |
+| File I/O | `downloadFile` (2 overloads), `downloadFileWithProgress`, `uploadFile`, `uploadFileWithProgress`, `readRange`, `readFileBytes`, `uploadFromStream`, `downloadToStream` |
+| Folder | `downloadFolder`, `downloadFolderWithProgress` |
+| Management | `deleteFile`, `deleteFiles`, `renameFile`, `createDirectory` |
+| Search | `searchFilesStreaming` (recursive wildcard walk) |
+| Control | `cancelDownload`, `cancelUpload`, `testConnection` |
+
+### Dependencies
+
+| Library | Version | Purpose |
+|---------|---------|---------|
+| AndroidX + Material Design 1.12 | — | UI components |
+| Dagger 2 | 2.51.1 | Dependency injection |
+| SMBJ | 0.14.0 | SMB2/3 client |
+| jcifs-ng | 2.1.10 | SMBv1 (CIFS/NT1) client |
+| slf4j-android | 1.7.36-0 | jcifs-ng logging bridge |
+| EncryptedSharedPreferences | — | Secure credential storage |
+| BouncyCastle | 1.83 | Forced global to satisfy both SMB libs |
 
 ## Building the Project
 
@@ -178,38 +203,3 @@ This software is provided "as is", without warranty of any kind, express or impl
 
 Where not permitted by applicable law (e.g. in cases of gross negligence or intent), this limitation of liability may not apply. Users utilize this software at their own risk.
 
-## Privacy Policy
-
-Our privacy policy is available on our [GitHub Pages site](https://egdels.github.io/SambaLite/privacy_policy.html).
-
-## Related Projects
-
-### MakeACopy
-
-[MakeACopy](https://github.com/egdels/makeacopy) is a privacy-friendly
-open-source document scanner for Android with offline OCR.
-
-Together with SambaLite it enables a fully automated document workflow:
-
-    Paper
-       ↓
-    Scan with MakeACopy
-       ↓
-    Inbox folder
-       ↓
-    SambaLite sync
-       ↓
-    NAS / archive
-
-This setup effectively turns your smartphone into a **mobile network
-scanner** for self-hosted document archives such as **paperless-ngx**.
-
-## Contributing
-
-Contributions are welcome! Please feel free to submit a Pull Request.
-
-1. Fork the repository
-2. Create your feature branch (`git checkout -b feature/amazing-feature`)
-3. Commit your changes (`git commit -m 'Add some amazing feature'`)
-4. Push to the branch (`git push origin feature/amazing-feature`)
-5. Open a Pull Request

@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">SambaLite</string>
+    <string name="app_name">SambaLite+</string>
     <string name="add_connection">Add Connection</string>
     <string name="system_monitor">System Monitor</string>
    
     <!-- Welcome Screen -->
-    <string name="welcome_title">Welcome to SambaLite</string>
+    <string name="welcome_title">Welcome to SambaLite+</string>
     <string name="welcome_subtitle">Connect to your SMB/CIFS shares easily and securely.</string>
     <string name="your_connections">Your Connections</string>
     <string name="your_folder_syncs">Your Folder Syncs</string>

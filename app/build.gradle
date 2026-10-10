@@ -12,6 +12,7 @@ android {
 
     packaging {
         resources.excludes.add('META-INF/versions/9/OSGI-INF/MANIFEST.MF')
+        resources.excludes.add('META-INF/DEPENDENCIES')
     }
 
 
@@ -211,6 +212,19 @@ dependencies {
         exclude group: 'org.bouncycastle', module: 'bcprov-jdk15on'
         exclude group: 'org.bouncycastle', module: 'bcpkix-jdk15on'
     }
+
+    // jcifs-ng for SMBv1 (CIFS/NT1) legacy support
+    // 2.1.10 is the first release compatible with BouncyCastle >= 1.77: 2.1.9's SPNEGO code
+    // (jcifs.spnego.NegTokenInit) still references ASN1ApplicationSpecific / DERApplicationSpecific,
+    // which were removed in BC 1.77 and merged into ASN1TaggedObject. With the BouncyCastle
+    // version forced below, 2.1.9 fails at runtime with NoClassDefFoundError on the first
+    // SMBv1 session setup that negotiates SPNEGO.
+    implementation('eu.agno3.jcifs:jcifs-ng:2.1.10') {
+        exclude group: 'org.slf4j', module: 'slf4j-log4j12'
+        exclude group: 'javax.servlet', module: 'javax.servlet-api'
+    }
+    // SLF4J Android bridge — routes jcifs-ng SLF4J calls to Android Logcat
+    implementation 'uk.uuid.slf4j:slf4j-android:1.7.36-0'
     
     // Note: BouncyCastle dependencies come transitively from SMBJ
     // Explicit dependencies removed as they are not directly used
@@ -271,10 +285,11 @@ dependencies {
     // Enhanced UI and Animation libraries
     // Note: interpolator removed - transitive dependency of Material Design
     // implementation 'androidx.interpolator:interpolator:1.0.0'  // UNUSED - comes transitively
-    
-    // Memory Management
-    debugImplementation 'com.squareup.leakcanary:leakcanary-android:2.14'
-    
+
+    // Note: LeakCanary removed - it registers a second "Leaks" launcher icon in the
+    // app drawer of every debug build. Re-add it here if leak detection is needed:
+    // debugImplementation 'com.squareup.leakcanary:leakcanary-android:2.14'
+
     // Advanced UI Components
     implementation 'androidx.recyclerview:recyclerview:1.4.0'
     // Note: cardview removed - MaterialCardView from Material Design is used instead

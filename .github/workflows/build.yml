@@ -9,6 +9,8 @@ on:
 jobs:
   build:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
     - name: Checkout code
@@ -28,49 +30,16 @@ jobs:
     - name: Grant execute permission for gradlew
       run: chmod +x gradlew
 
-    - name: Decode Keystore
-      run: |
-        echo "${{ secrets.KEYSTORE_BASE64 }}" | base64 -d > app/keystore.jks
+    - name: Build Debug APK
+      run: ./gradlew assembleDebug
 
-    - name: Build Release APK and Bundle
-      run: |
-        ./gradlew assembleRelease bundleRelease \
-        -PSIGNING_KEY_ALIAS="${SIGNING_KEY_ALIAS}" \
-        -PSIGNING_KEY_PASSWORD="${SIGNING_KEY_PASSWORD}" \
-        -PSIGNING_STORE_PASSWORD="${SIGNING_STORE_PASSWORD}"
+    - name: Publish latest pre-release
+      uses: softprops/action-gh-release@v1
+      with:
+        tag_name: latest
+        name: Latest Build
+        body: "Automated debug build from the latest commit on `main`."
+        prerelease: true
+        files: app/build/outputs/apk/debug/app-debug.apk
       env:
-        SIGNING_KEY_ALIAS: ${{ secrets.SIGNING_KEY_ALIAS }}
-        SIGNING_KEY_PASSWORD: ${{ secrets.SIGNING_KEY_PASSWORD }}
-        SIGNING_STORE_PASSWORD: ${{ secrets.SIGNING_STORE_PASSWORD }}
-
-    - name: Verify APK signature
-      run: |
-        aapt dump badging app/build/outputs/apk/release/app-release.apk | head -1
-        echo "APK verification completed"
-
-    - name: Upload APK
-      uses: actions/upload-artifact@v4
-      with:
-        name: SambaLite-APK
-        path: app/build/outputs/apk/release/app-release.apk
-        retention-days: 30
-
-    - name: Upload AAB
-      uses: actions/upload-artifact@v4
-      with:
-        name: SambaLite-AAB
-        path: app/build/outputs/bundle/release/app-release.aab
-        retention-days: 30
-
-    - name: Upload R8 mapping file
-      uses: actions/upload-artifact@v4
-      with:
-        name: SambaLite-mapping
-        path: app/build/outputs/mapping/release/mapping.txt
-        retention-days: 30
-
-    - name: Clean up keystore
-      if: always()
-      run: |
-        rm -f app/keystore.jks
-        echo "Keystore cleaned up"
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

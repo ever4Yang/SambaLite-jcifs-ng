@@ -33,6 +33,8 @@ import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
 import androidx.appcompat.app.AlertDialog;
 import androidx.appcompat.app.AppCompatActivity;
+import androidx.appcompat.app.AppCompatDelegate;
+import androidx.core.os.LocaleListCompat;
 import androidx.core.app.NotificationManagerCompat;
 import androidx.core.content.ContextCompat;
 import androidx.lifecycle.ViewModelProvider;
@@ -991,6 +993,8 @@ public class MainActivity extends AppCompatActivity
         dialogView.findViewById(R.id.signing_switch);
     com.google.android.material.materialswitch.MaterialSwitch asyncTransportSwitch =
         dialogView.findViewById(R.id.async_transport_switch);
+    com.google.android.material.materialswitch.MaterialSwitch legacySmbV1Switch =
+        dialogView.findViewById(R.id.legacy_smb_v1_switch);
 
     // Get references to shares UI elements
     View sharesSection = dialogView.findViewById(R.id.shares_section);
@@ -1157,6 +1161,7 @@ public class MainActivity extends AppCompatActivity
             if (signingSwitch != null) connection.setSigningRequired(signingSwitch.isChecked());
             if (asyncTransportSwitch != null)
               connection.setAsyncTransport(asyncTransportSwitch.isChecked());
+            if (legacySmbV1Switch != null) connection.setLegacySmbV1(legacySmbV1Switch.isChecked());
 
             LogUtils.i("MainActivity", "Saving new connection: " + name);
             saveConnectionAfterDefaultFolderCheck(
@@ -1203,6 +1208,8 @@ public class MainActivity extends AppCompatActivity
             if (signingSwitch != null) testConnection.setSigningRequired(signingSwitch.isChecked());
             if (asyncTransportSwitch != null)
               testConnection.setAsyncTransport(asyncTransportSwitch.isChecked());
+            if (legacySmbV1Switch != null)
+              testConnection.setLegacySmbV1(legacySmbV1Switch.isChecked());
 
             LogUtils.i("MainActivity", "Testing connection to server: " + server);
             testConnection(testConnection);
@@ -1326,6 +1333,8 @@ public class MainActivity extends AppCompatActivity
         dialogView.findViewById(R.id.signing_switch);
     com.google.android.material.materialswitch.MaterialSwitch asyncTransportSwitchEdit =
         dialogView.findViewById(R.id.async_transport_switch);
+    com.google.android.material.materialswitch.MaterialSwitch legacySmbV1SwitchEdit =
+        dialogView.findViewById(R.id.legacy_smb_v1_switch);
     com.google.android.material.textfield.TextInputLayout passwordLayoutEdit =
         dialogView.findViewById(R.id.password_layout);
 
@@ -1465,6 +1474,7 @@ public class MainActivity extends AppCompatActivity
     if (signingSwitchEdit != null) signingSwitchEdit.setChecked(connection.isSigningRequired());
     if (asyncTransportSwitchEdit != null)
       asyncTransportSwitchEdit.setChecked(connection.isAsyncTransport());
+    if (legacySmbV1SwitchEdit != null) legacySmbV1SwitchEdit.setChecked(connection.isLegacySmbV1());
 
     // Get references to custom buttons
     Button btnSave = dialogView.findViewById(R.id.btn_save);
@@ -1556,6 +1566,8 @@ public class MainActivity extends AppCompatActivity
               updatedConnection.setSigningRequired(signingSwitchEdit.isChecked());
             if (asyncTransportSwitchEdit != null)
               updatedConnection.setAsyncTransport(asyncTransportSwitchEdit.isChecked());
+            if (legacySmbV1SwitchEdit != null)
+              updatedConnection.setLegacySmbV1(legacySmbV1SwitchEdit.isChecked());
 
             LogUtils.i("MainActivity", "Updating connection: " + name);
             saveConnectionAfterDefaultFolderCheck(
@@ -1608,6 +1620,8 @@ public class MainActivity extends AppCompatActivity
               testConnection.setSigningRequired(signingSwitchEdit.isChecked());
             if (asyncTransportSwitchEdit != null)
               testConnection.setAsyncTransport(asyncTransportSwitchEdit.isChecked());
+            if (legacySmbV1SwitchEdit != null)
+              testConnection.setLegacySmbV1(legacySmbV1SwitchEdit.isChecked());
             testConnection(testConnection);
           } else {
             focusFirstInvalidField(firstInvalidField);
@@ -1663,6 +1677,11 @@ public class MainActivity extends AppCompatActivity
       startActivity(intent);
       return true;
     }
+    if (item.getItemId() == R.id.action_language) {
+      LogUtils.d("MainActivity", "Language menu item selected");
+      showLanguageDialog();
+      return true;
+    }
     if (item.getItemId() == R.id.action_quit) {
       LogUtils.d("MainActivity", "Quit menu item selected");
       handleQuit();
@@ -1691,6 +1710,31 @@ public class MainActivity extends AppCompatActivity
       backgroundSmbManager.requestStopService();
     }
     finishAffinity();
+  }
+
+  private void showLanguageDialog() {
+    LocaleListCompat current = AppCompatDelegate.getApplicationLocales();
+    String currentTag = current.isEmpty() ? "" : current.get(0).getLanguage();
+    int checked = currentTag.startsWith("zh") ? 1 : currentTag.equals("en") ? 0 : 2;
+    String[] items = {
+      getString(R.string.language_english),
+      getString(R.string.language_chinese),
+      getString(R.string.language_system)
+    };
+    new MaterialAlertDialogBuilder(this)
+        .setTitle(R.string.action_language)
+        .setSingleChoiceItems(
+            items,
+            checked,
+            (dialog, which) -> {
+              LocaleListCompat locale;
+              if (which == 0) locale = LocaleListCompat.forLanguageTags("en");
+              else if (which == 1) locale = LocaleListCompat.forLanguageTags("zh");
+              else locale = LocaleListCompat.getEmptyLocaleList();
+              AppCompatDelegate.setApplicationLocales(locale);
+              dialog.dismiss();
+            })
+        .show();
   }
 
   /**

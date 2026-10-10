@@ -118,6 +118,17 @@
 -keep interface org.bouncycastle.** { *; }
 -dontwarn org.bouncycastle.**
 
+# jcifs-ng (SMBv1 legacy backend) and its SLF4J bridge
+-keep class jcifs.** { *; }
+-keep interface jcifs.** { *; }
+-dontwarn jcifs.**
+-keep class uk.uuid.slf4j.** { *; }
+-dontwarn uk.uuid.slf4j.**
+-keep class org.slf4j.** { *; }
+-dontwarn org.slf4j.**
+-dontwarn javax.security.auth.callback.**
+-dontwarn java.security.jgss.**
+
 # Material Components, AppCompat, Room, WorkManager, Tink etc. ship their own
 # consumer rules, and views referenced from layouts are kept by the rules that
 # AAPT generates. No blanket keeps for them.

@@ -1,11 +1,11 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">SambaLite</string>
+    <string name="app_name">SambaLite+</string>
     <string name="add_connection">添加连接</string>
     <string name="system_monitor">系统监控器</string>
 
     <!-- Welcome Screen -->
-    <string name="welcome_title">欢迎来到 SambaLite</string>
+    <string name="welcome_title">欢迎使用 SambaLite+</string>
     <string name="welcome_subtitle">轻松安全地连接到 SMB/CIFS 分享。</string>
     <string name="your_connections">你的连接</string>
     <string name="your_folder_syncs">文件夹同步</string>
@@ -250,6 +250,13 @@
     <string name="require_encryption">要求加密（SMB3）</string>
     <string name="require_signing">要求签名</string>
     <string name="use_async_transport">使用异步传输（更快）</string>
+    <string name="use_legacy_smb_v1">使用旧版 SMBv1 (CIFS)</string>
+    <string name="use_legacy_smb_v1_summary">适用于不支持 SMB2/3 的旧设备或 NAS，将禁用加密和签名。</string>
+    <!-- Language switcher -->
+    <string name="action_language">语言</string>
+    <string name="language_english">English（英语）</string>
+    <string name="language_chinese">中文</string>
+    <string name="language_system">跟随系统</string>
 
     <!-- Multi-Select Delete -->
     <string name="delete_multiple_title">@string/delete_file_dialog_title</string>
